@@ -1,0 +1,24 @@
+# FRONTEND - Early Warning System
+
+# Core
+react==19.0.0
+react-dom==19.0.0
+typescript==5.5.4
+
+# Estilos
+tailwindcss==3.4.1
+postcss==8.4.31
+autoprefixer==10.4.16
+
+# CSV parsing
+papaparse==5.4.1
+
+# PDF & captura
+jspdf==2.5.1
+html2canvas==1.4.1
+
+# Backend (Supabase)
+@supabase/supabase-js==2.39.0
+
+# Email
+emailjs-com==3.2.0
