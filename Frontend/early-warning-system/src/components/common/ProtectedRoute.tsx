@@ -1,17 +1,19 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../../contex/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 
-export const ProtectedRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+interface Props {
+  children: React.ReactNode;
+  roles?: Array<"admin" | "teacher" | "specialist">; // opcional
+}
 
-  if (loading) {
-    return <div className="p-6">Cargando...</div>;
+export const ProtectedRoute: React.FC<Props> = ({ children, roles }) => {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (roles && !roles.includes(user.role)) {
+    // sin permiso -> vuelve al dashboard
+    return <Navigate to="/" replace />;
   }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
   return <>{children}</>;
 };

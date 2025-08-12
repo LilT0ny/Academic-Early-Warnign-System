@@ -3,9 +3,9 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles/index.css";
-import { AuthProvider } from "./contex/AuthContext";
-import { ThemeProvider } from "./contex/ThemeContext";
-import { AppProvider } from "./contex/AppContext";
+import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
+import { AppProvider } from "./context/AppContext";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -1,238 +1,186 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import {
   Users,
   AlertTriangle,
   TrendingUp,
   TrendingDown,
-  BookOpen,
   Clock,
-  Target,
   ChevronRight,
   FileText,
   UserCheck,
   AlertCircle,
   CheckCircle2,
+  Target,
 } from "lucide-react";
 
-// --- Tipos ---
-type ColorKey = "blue" | "red" | "green" | "purple";
-type ChangeType = "increase" | "decrease";
-type StudentStatus = "normal" | "warning" | "critical";
-type AlertType = "academic" | "attendance" | "behavior";
+// —— Tipos auxiliares ——
+type ColorKey = "blue" | "green" | "purple" | "yellow";
 type Severity = "low" | "medium" | "high";
 type AlertStatus = "pending" | "reviewing" | "resolved";
 
-interface StatCard {
+interface Stat {
   title: string;
   value: string | number;
-  change: number;
-  changeType: ChangeType;
-  icon: React.ElementType;
+  change: number; // en %
+  changeType: "increase" | "decrease";
   color: ColorKey;
+  icon: React.ElementType;
 }
 
-interface Student {
+interface RecentAlert {
   id: string;
-  name: string;
-  email: string;
-  grade: number;
-  status: StudentStatus;
-  lastActivity: string;
-  course: string;
-}
-
-interface Alert {
-  id: string;
-  type: AlertType;
   title: string;
   description: string;
   student: string;
   severity: Severity;
-  createdAt: string;
   status: AlertStatus;
+  createdAt: string; // ISO
 }
 
-const DashboardPage: React.FC = () => {
-  const [selectedTimeRange, setSelectedTimeRange] = useState<
-    "7d" | "30d" | "3m" | "1y"
-  >("7d");
+interface StudentRisk {
+  id: string;
+  name: string;
+  course: string;
+  grade: number;
+  status: "critical" | "warning" | "normal";
+}
 
-  // --- Datos simulados ---
-  const stats: StatCard[] = [
-    {
-      title: "Total Estudiantes",
-      value: 1245,
-      change: 5.2,
-      changeType: "increase",
-      icon: Users,
-      color: "blue",
-    },
-    {
-      title: "Alertas Activas",
-      value: 23,
-      change: -12.5,
-      changeType: "decrease",
-      icon: AlertTriangle,
-      color: "red",
-    },
-    {
-      title: "Tasa de Retención",
-      value: "94.2%",
-      change: 2.1,
-      changeType: "increase",
-      icon: TrendingUp,
-      color: "green",
-    },
-    {
-      title: "Promedio General",
-      value: "8.4",
-      change: 0.3,
-      changeType: "increase",
-      icon: BookOpen,
-      color: "purple",
-    },
+// —— Utilidades de estilo ——
+const getColorClass = (color: ColorKey, mode: "bg" | "text" = "bg") => {
+  const map: Record<ColorKey, { bg: string; text: string }> = {
+    blue: { bg: "bg-blue-600", text: "text-blue-600" },
+    green: { bg: "bg-green-600", text: "text-green-600" },
+    purple: { bg: "bg-purple-600", text: "text-purple-600" },
+    yellow: { bg: "bg-yellow-500", text: "text-yellow-600" },
+  };
+  return map[color][mode];
+};
+
+const getStatusColor = (status: "normal" | "warning" | "critical" | AlertStatus) => {
+  const colors: Record<string, string> = {
+    normal: "border-green-200 text-green-700 bg-green-50",
+    warning: "border-yellow-200 text-yellow-700 bg-yellow-50",
+    critical: "border-red-200 text-red-700 bg-red-50",
+    pending: "border-yellow-200 text-yellow-700 bg-yellow-50",
+    reviewing: "border-blue-200 text-blue-700 bg-blue-50",
+    resolved: "border-emerald-200 text-emerald-700 bg-emerald-50",
+  };
+  return colors[status];
+};
+
+const getSeverityColor = (severity: Severity) => {
+  const colors: Record<Severity, string> = {
+    low: "bg-blue-100 text-blue-800",
+    medium: "bg-yellow-100 text-yellow-800",
+    high: "bg-red-100 text-red-800",
+  };
+  return colors[severity];
+};
+
+const getStatusIcon = (status: AlertStatus) => {
+  const icons: Record<AlertStatus, React.ElementType> = {
+    pending: AlertCircle,
+    reviewing: Clock,
+    resolved: CheckCircle2,
+  };
+  return icons[status];
+};
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// —— Mock de datos (reemplaza por tus fetch/queries) ——
+const useMockData = () => {
+  const stats: Stat[] = [
+    { title: "Alertas Activas", value: 32, change: 12, changeType: "increase", color: "blue", icon: AlertTriangle },
+    { title: "Estudiantes en Riesgo", value: 14, change: 5, changeType: "decrease", color: "purple", icon: Users },
+    { title: "Citas Programadas", value: 21, change: 8, changeType: "increase", color: "green", icon: Clock },
+    { title: "Intervenciones", value: 9, change: 3, changeType: "increase", color: "yellow", icon: Target },
   ];
 
-  const recentAlerts: Alert[] = [
+  const recentAlerts: RecentAlert[] = [
     {
-      id: "1",
-      type: "academic",
-      title: "Bajo rendimiento académico",
-      description:
-        "Calificaciones por debajo del promedio en las últimas 3 evaluaciones",
-      student: "Ana García Morales",
+      id: "a1",
+      title: "Ausencias repetidas",
+      description: "3 inasistencias en la última semana",
+      student: "María Gómez",
       severity: "high",
-      createdAt: "2024-01-15T10:30:00Z",
       status: "pending",
+      createdAt: new Date().toISOString(),
     },
     {
-      id: "2",
-      type: "attendance",
-      title: "Ausentismo frecuente",
-      description: "Más de 5 faltas sin justificar en el último mes",
-      student: "Carlos Rodríguez Silva",
+      id: "a2",
+      title: "Bajo rendimiento",
+      description: "Promedio < 7.0 en Matemática",
+      student: "Luis Pineda",
       severity: "medium",
-      createdAt: "2024-01-15T09:15:00Z",
       status: "reviewing",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
     },
     {
-      id: "3",
-      type: "behavior",
-      title: "Cambio en comportamiento",
-      description: "Reportes de desinterés y falta de participación",
-      student: "María José López",
-      severity: "medium",
-      createdAt: "2024-01-15T08:45:00Z",
-      status: "pending",
+      id: "a3",
+      title: "Riesgo socioemocional",
+      description: "Reporte del tutor",
+      student: "Ana Ruiz",
+      severity: "low",
+      status: "resolved",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
     },
   ];
 
-  const studentsAtRisk: Student[] = [
-    {
-      id: "1",
-      name: "Ana García Morales",
-      email: "ana.garcia@estudiante.edu",
-      grade: 6.2,
-      status: "critical",
-      lastActivity: "2024-01-14T14:30:00Z",
-      course: "Ingeniería de Sistemas",
-    },
-    {
-      id: "2",
-      name: "Carlos Rodríguez Silva",
-      email: "carlos.rodriguez@estudiante.edu",
-      grade: 7.1,
-      status: "warning",
-      lastActivity: "2024-01-13T16:20:00Z",
-      course: "Administración de Empresas",
-    },
-    {
-      id: "3",
-      name: "María José López",
-      email: "maria.lopez@estudiante.edu",
-      grade: 7.5,
-      status: "warning",
-      lastActivity: "2024-01-15T11:15:00Z",
-      course: "Psicología",
-    },
+  const studentsAtRisk: StudentRisk[] = [
+    { id: "s1", name: "Carlos Pérez", course: "8°A", grade: 6.5, status: "critical" },
+    { id: "s2", name: "Daniela López", course: "9°B", grade: 7.1, status: "warning" },
+    { id: "s3", name: "Juan Torres", course: "10°A", grade: 8.2, status: "normal" },
   ];
 
-  // --- Helpers de estilos/íconos ---
-  const getColorClass = (color: ColorKey, type: "bg" | "text" | "border") => {
-    const colors: Record<
-      ColorKey,
-      { bg: string; text: string; border: string }
-    > = {
-      blue: {
-        bg: "bg-blue-500",
-        text: "text-blue-600",
-        border: "border-blue-200",
-      },
-      red: { bg: "bg-red-500", text: "text-red-600", border: "border-red-200" },
-      green: {
-        bg: "bg-green-500",
-        text: "text-green-600",
-        border: "border-green-200",
-      },
-      purple: {
-        bg: "bg-purple-500",
-        text: "text-purple-600",
-        border: "border-purple-200",
-      },
-    };
-    return colors[color][type];
-  };
+  return { stats, recentAlerts, studentsAtRisk };
+};
 
-  const getStatusColor = (status: StudentStatus) => {
-    const colors: Record<StudentStatus, string> = {
-      normal: "bg-green-100 text-green-800 border-green-200",
-      warning: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      critical: "bg-red-100 text-red-800 border-red-200",
-    };
-    return colors[status];
-  };
+// —— Componente principal ——
+const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { stats, recentAlerts, studentsAtRisk } = useMockData();
+  const [selectedTimeRange, setSelectedTimeRange] = useState<"7d" | "30d" | "3m" | "1y">("7d");
 
-  const getSeverityColor = (severity: Severity) => {
-    const colors: Record<Severity, string> = {
-      low: "bg-blue-100 text-blue-800",
-      medium: "bg-yellow-100 text-yellow-800",
-      high: "bg-red-100 text-red-800",
-    };
-    return colors[severity];
-  };
-
-  const getStatusIcon = (status: AlertStatus) => {
-    const icons: Record<AlertStatus, React.ElementType> = {
-      pending: AlertCircle,
-      reviewing: Clock,
-      resolved: CheckCircle2,
-    };
-    return icons[status];
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("es-ES", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  // (Opcional) recalcular métricas por rango de tiempo
+  const timeRangeLabel = useMemo(() => {
+    return (
+      {
+        "7d": "Últimos 7 días",
+        "30d": "Últimos 30 días",
+        "3m": "Últimos 3 meses",
+        "1y": "Último año",
+      } as const
+    )[selectedTimeRange];
+  }, [selectedTimeRange]);
 
   return (
     <MainLayout currentPage="dashboard">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <main className="space-y-8" aria-label="Panel principal">
+        {/* Link de salto de accesibilidad */}
+        <a
+          href="#dashboard-content"
+          className="sr-only focus:not-sr-only absolute top-2 left-2 bg-white text-blue-700 px-3 py-2 rounded shadow z-50"
+        >
+          Saltar al contenido principal
+        </a>
+
+        {/* Encabezado */}
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Dashboard
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Resumen general del sistema de alerta temprana académica
+              Resumen general del sistema de alerta temprana académica — {timeRangeLabel}
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
@@ -254,121 +202,116 @@ const DashboardPage: React.FC = () => {
               <option value="1y">Último año</option>
             </select>
           </div>
-        </div>
+        </header>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-          {stats.map((stat, index) => (
-            <div
-              key={index}
-              className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
-            >
-              <div className="p-4 lg:p-6">
-                <div className="flex items-center">
+        {/* ===== Contenido principal ===== */}
+        <section id="dashboard-content" className="space-y-8">
+          {/* Tarjetas de estadísticas */}
+          <section aria-label="Estadísticas" className="mb-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {stats.map((stat) => {
+                const Icon = stat.icon;
+                return (
                   <div
-                    className={`flex-shrink-0 rounded-md p-3 ${getColorClass(
-                      stat.color,
-                      "bg"
-                    )}`}
+                    key={stat.title}
+                    className="rounded-lg border bg-white p-6 shadow-sm flex items-center gap-4"
+                    aria-label={stat.title}
                   >
-                    <stat.icon className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4 flex-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="truncate text-sm font-medium text-gray-500">
-                          {stat.title}
-                        </p>
-                        <p className="text-2xl font-semibold text-gray-900">
-                          {stat.value}
-                        </p>
+                    <div
+                      className={`flex h-12 w-12 items-center justify-center rounded-full ${getColorClass(
+                        stat.color,
+                        "bg"
+                      )}`}
+                    >
+                      <Icon className="h-6 w-6 text-white" aria-hidden="true" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-500">{stat.title}</div>
+                      <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+                      <div className="flex items-center gap-1 mt-1">
+                        {stat.changeType === "increase" ? (
+                          <TrendingUp className="h-4 w-4 text-green-500" aria-hidden="true" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-red-500" aria-hidden="true" />
+                        )}
+                        <span
+                          className={`text-xs font-medium ${
+                            stat.changeType === "increase"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {stat.change > 0 ? "+" : ""}
+                          {stat.change}%
+                        </span>
                       </div>
                     </div>
-                    <div className="mt-2 flex items-center">
-                      {stat.changeType === "increase" ? (
-                        <TrendingUp className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-500" />
-                      )}
-                      <span
-                        className={`ml-1 text-sm font-medium ${
-                          stat.changeType === "increase"
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {Math.abs(stat.change)}%
-                      </span>
-                      <span className="ml-1 text-sm text-gray-500">
-                        vs mes anterior
-                      </span>
-                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          </section>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Recent Alerts */}
-          <div className="lg:col-span-2">
+          {/* Grid principal: Alertas y Estudiantes */}
+          <section
+            className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+            aria-label="Alertas y estudiantes en riesgo"
+          >
+            {/* Alertas recientes */}
             <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
               <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900">
-                    Alertas Recientes
-                  </h3>
+                  <h2 className="text-lg font-medium leading-6 text-gray-900">
+                    Alertas recientes
+                  </h2>
                   <Link
                     to="/alerts"
                     className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                    aria-label="Ver todas las alertas"
                   >
                     Ver todas
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Link>
                 </div>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-100">
                 {recentAlerts.map((alert) => {
                   const StatusIcon = getStatusIcon(alert.status);
                   return (
-                    <div
-                      key={alert.id}
-                      className="px-4 py-4 hover:bg-gray-50 sm:px-6"
-                    >
+                    <div key={alert.id} className="px-4 py-4 hover:bg-gray-50 sm:px-6">
                       <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <StatusIcon className="mt-1 h-5 w-5 text-gray-400" />
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            <div
+                              className={`flex h-10 w-10 items-center justify-center rounded-full ${getSeverityColor(
+                                alert.severity
+                              )}`}
+                            >
+                              <AlertTriangle className="h-5 w-5 text-white" aria-hidden="true" />
+                            </div>
+                          </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900">
-                              {alert.title}
-                            </p>
-                            <p className="mt-1 text-sm text-gray-500">
-                              {alert.description}
-                            </p>
-                            <div className="mt-2 flex items-center space-x-4">
-                              <span className="text-sm text-gray-500">
-                                {alert.student}
-                              </span>
-                              <span className="text-sm text-gray-400">•</span>
-                              <span className="text-sm text-gray-500">
-                                {formatDate(alert.createdAt)}
-                              </span>
+                            <p className="text-sm font-medium text-gray-900">{alert.title}</p>
+                            <p className="mt-1 text-sm text-gray-500">{alert.description}</p>
+                            <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                              <span>{alert.student}</span>
+                              <span className="text-gray-400">•</span>
+                              <span>{formatDate(alert.createdAt)}</span>
                             </div>
                           </div>
                         </div>
                         <div className="flex flex-col items-end space-y-2">
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getSeverityColor(
-                              alert.severity
+                            className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium ${getStatusColor(
+                              alert.status
                             )}`}
                           >
-                            {alert.severity === "high"
-                              ? "Alta"
-                              : alert.severity === "medium"
-                              ? "Media"
-                              : "Baja"}
+                            <StatusIcon className="mr-1 h-4 w-4" aria-hidden />
+                            {alert.status === "pending"
+                              ? "Pendiente"
+                              : alert.status === "reviewing"
+                              ? "En revisión"
+                              : "Resuelta"}
                           </span>
                         </div>
                       </div>
@@ -377,31 +320,25 @@ const DashboardPage: React.FC = () => {
                 })}
               </div>
             </div>
-          </div>
 
-          {/* Students at Risk */}
-          <div className="lg:col-span-1">
+            {/* Estudiantes en riesgo */}
             <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
               <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900">
-                    Estudiantes en Riesgo
-                  </h3>
+                  <h2 className="text-lg font-medium leading-6 text-gray-900">Estudiantes en riesgo</h2>
                   <Link
                     to="/students?filter=risk"
                     className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                    aria-label="Ver todos los estudiantes en riesgo"
                   >
                     Ver todos
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Link>
                 </div>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-100">
                 {studentsAtRisk.map((student) => (
-                  <div
-                    key={student.id}
-                    className="px-4 py-4 hover:bg-gray-50 sm:px-6"
-                  >
+                  <div key={student.id} className="px-4 py-4 hover:bg-gray-50 sm:px-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="flex-shrink-0">
@@ -416,16 +353,10 @@ const DashboardPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-900">
-                            {student.name}
-                          </p>
-                          <p className="truncate text-sm text-gray-500">
-                            {student.course}
-                          </p>
+                          <p className="truncate text-sm font-medium text-gray-900">{student.name}</p>
+                          <p className="truncate text-sm text-gray-500">{student.course}</p>
                           <div className="mt-1 flex items-center space-x-2">
-                            <span className="text-sm text-gray-600">
-                              Promedio: {student.grade}
-                            </span>
+                            <span className="text-sm text-gray-600">Promedio: {student.grade}</span>
                           </div>
                         </div>
                       </div>
@@ -447,52 +378,51 @@ const DashboardPage: React.FC = () => {
                 ))}
               </div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Quick Actions */}
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
-            <h3 className="text-lg font-medium leading-6 text-gray-900">
-              Acciones Rápidas
-            </h3>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <button className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-gray-50">
-                <FileText className="h-6 w-6 text-blue-600" />
-                <span className="ml-3 text-sm font-medium text-gray-900">
-                  Generar Reporte
-                </span>
-              </button>
-              <button className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-gray-50">
-                <UserCheck className="h-6 w-6 text-green-600" />
-                <span className="ml-3 text-sm font-medium text-gray-900">
-                  Revisar Alertas
-                </span>
-              </button>
-              <Link
-                to="/students"
-                className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-purple-300 hover:bg-gray-50"
-              >
-                <Users className="h-6 w-6 text-purple-600" />
-                <span className="ml-3 text-sm font-medium text-gray-900">
-                  Ver Estudiantes
-                </span>
-              </Link>
-              <Link
-                to="/settings"
-                className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-yellow-300 hover:bg-gray-50"
-              >
-                <Target className="h-6 w-6 text-yellow-600" />
-                <span className="ml-3 text-sm font-medium text-gray-900">
-                  Configurar Alertas
-                </span>
-              </Link>
+          {/* Acciones rápidas */}
+          <section className="rounded-lg border border-gray-200 bg-white shadow-sm" aria-label="Acciones rápidas">
+            <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
+              <h3 className="text-lg font-medium leading-6 text-gray-900">Acciones Rápidas</h3>
             </div>
-          </div>
-        </div>
-      </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <button
+                  onClick={() => navigate("/reports/new")}
+                  className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-blue-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                >
+                  <FileText className="h-6 w-6 text-blue-600" aria-hidden="true" />
+                  <span className="ml-3 text-sm font-medium text-gray-900">Generar Reporte</span>
+                </button>
+
+                <button
+                  onClick={() => navigate("/alerts?status=pending")}
+                  className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-green-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-600"
+                >
+                  <UserCheck className="h-6 w-6 text-green-600" aria-hidden="true" />
+                  <span className="ml-3 text-sm font-medium text-gray-900">Revisar Alertas</span>
+                </button>
+
+                <Link
+                  to="/students"
+                  className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-purple-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-600"
+                >
+                  <Users className="h-6 w-6 text-purple-600" aria-hidden="true" />
+                  <span className="ml-3 text-sm font-medium text-gray-900">Ver Estudiantes</span>
+                </Link>
+
+                <Link
+                  to="/settings/alerts"
+                  className="flex items-center rounded-lg border border-gray-200 p-4 transition-colors hover:border-yellow-300 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-600"
+                >
+                  <Target className="h-6 w-6 text-yellow-600" aria-hidden="true" />
+                  <span className="ml-3 text-sm font-medium text-gray-900">Configurar Alertas</span>
+                </Link>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
     </MainLayout>
   );
 };
