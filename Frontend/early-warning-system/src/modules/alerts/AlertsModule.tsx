@@ -1,443 +1,625 @@
-import React, { useMemo, useState } from "react";
-import { useApp } from "../../context/AppContext";
-
+import React, { useState, useMemo } from 'react';
 import {
-  Search,
-  Filter,
+  AlertTriangle,
   AlertCircle,
-  CheckCircle2,
   Clock,
-  User,
-  Tag,
-  Eye,
-  Mail,
+  CheckCircle2,
+  Filter,
+  Search,
   Download,
+  Eye,
+  User,
+  Calendar,
+  BookOpen,
+  Bell,
   X,
-} from "lucide-react";
+  Target
+} from 'lucide-react';
 
-type AlertType = "academic" | "attendance" | "behavior";
-type Severity = "low" | "medium" | "high" | "critical";
-type Status = "pending" | "reviewing" | "resolved";
+// Tipos
+type AlertSeverity = 'critical' | 'high' | 'medium' | 'low';
+type AlertStatus = 'active' | 'reviewing' | 'resolved' | 'dismissed';
+type AlertCategory = 'academic' | 'attendance' | 'behavioral' | 'financial';
 
-interface AlertItem {
+interface Alert {
   id: string;
-  type: AlertType;
+  studentId: string;
+  studentName: string;
+  studentAvatar?: string;
   title: string;
   description: string;
-  student: string;
-  course: string;
-  severity: Severity;
-  status: Status;
+  category: AlertCategory;
+  severity: AlertSeverity;
+  status: AlertStatus;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
+  course: string;
   assignedTo?: string;
-  tags?: string[];
-  evidenceCount?: number;
+  metrics?: {
+    currentGrade?: number;
+    previousGrade?: number;
+    attendanceRate?: number;
+    missedClasses?: number;
+  };
+  actions?: string[];
 }
 
-const MOCK_ALERTS: AlertItem[] = [
+interface AlertFilters {
+  severity: AlertSeverity | 'all';
+  status: AlertStatus | 'all';
+  category: AlertCategory | 'all';
+  dateRange: '24h' | '7d' | '30d' | 'all';
+  assignedTo: string;
+}
+
+// Mock data
+const mockAlerts: Alert[] = [
   {
-    id: "a-101",
-    type: "academic",
-    title: "Bajo rendimiento en evaluaciones",
-    description: "Promedio < 60% en las últimas 3 evaluaciones.",
-    student: "Ana García Morales",
-    course: "Cálculo I",
-    severity: "high",
-    status: "pending",
-    createdAt: "2025-08-05T10:30:00Z",
-    assignedTo: "Coordinación Académica",
-    tags: ["rendimiento", "tutoría"],
-    evidenceCount: 3,
+    id: '1',
+    studentId: 'EST001',
+    studentName: 'María González Pérez',
+    title: 'Bajo rendimiento académico crítico',
+    description: 'El estudiante ha obtenido calificaciones por debajo de 6.0 en los últimos 3 exámenes consecutivos',
+    category: 'academic',
+    severity: 'critical',
+    status: 'active',
+    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 min ago
+    updatedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    course: 'Matemática Aplicada III',
+    assignedTo: 'Prof. Juan Rodríguez',
+    metrics: {
+      currentGrade: 5.2,
+      previousGrade: 7.8,
+      attendanceRate: 85
+    },
+    actions: ['Tutoría personalizada', 'Reunión con padres', 'Plan de recuperación']
   },
   {
-    id: "a-102",
-    type: "attendance",
-    title: "Faltas injustificadas",
-    description: "5 ausencias en el último mes.",
-    student: "Carlos Rodríguez Silva",
-    course: "Administración II",
-    severity: "medium",
-    status: "reviewing",
-    createdAt: "2025-08-06T09:10:00Z",
-    assignedTo: "Bienestar",
-    tags: ["asistencia"],
-    evidenceCount: 1,
+    id: '2',
+    studentId: 'EST002',
+    studentName: 'Carlos Mendoza Silva',
+    title: 'Ausentismo recurrente',
+    description: 'Ha faltado a 8 clases en las últimas 2 semanas sin justificación',
+    category: 'attendance',
+    severity: 'high',
+    status: 'reviewing',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
+    updatedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+    course: 'Ingeniería de Software',
+    assignedTo: 'Coord. Ana López',
+    metrics: {
+      attendanceRate: 62,
+      missedClasses: 8
+    },
+    actions: ['Contactar estudiante', 'Verificar situación personal']
   },
   {
-    id: "a-103",
-    type: "behavior",
-    title: "Cambio en comportamiento",
-    description: "Baja participación y desinterés en clase.",
-    student: "María José López",
-    course: "Psicología Social",
-    severity: "low",
-    status: "pending",
-    createdAt: "2025-08-07T12:00:00Z",
-    tags: ["seguimiento"],
-    evidenceCount: 0,
+    id: '3',
+    studentId: 'EST003',
+    studentName: 'Luisa Ramírez Torres',
+    title: 'Cambio drástico en comportamiento',
+    description: 'Reportes de profesores sobre cambios significativos en participación y actitud',
+    category: 'behavioral',
+    severity: 'medium',
+    status: 'active',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), // 6 hours ago
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+    course: 'Múltiples materias',
+    assignedTo: 'Psicóloga Educativa',
+    metrics: {
+      currentGrade: 7.5,
+      previousGrade: 8.2
+    },
+    actions: ['Evaluación psicológica', 'Entrevista personal']
   },
   {
-    id: "a-104",
-    type: "academic",
-    title: "Riesgo crítico de reprobación",
-    description: "2 parciales reprobados.",
-    student: "Juan Pablo Martínez",
-    course: "Derecho Constitucional",
-    severity: "critical",
-    status: "pending",
-    createdAt: "2025-08-07T08:45:00Z",
-    assignedTo: "Docencia",
-    tags: ["reprobación", "prioritario"],
-    evidenceCount: 2,
+    id: '4',
+    studentId: 'EST004',
+    studentName: 'Roberto Vásquez León',
+    title: 'Mora en pagos académicos',
+    description: 'Tiene pendientes de pago que pueden afectar su continuidad académica',
+    category: 'financial',
+    severity: 'high',
+    status: 'active',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(), // 12 hours ago
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+    course: 'N/A',
+    assignedTo: 'Bienestar Estudiantil',
+    actions: ['Reestructuración de pagos', 'Beca de emergencia']
   },
+  {
+    id: '5',
+    studentId: 'EST005',
+    studentName: 'Andrea Morales Castro',
+    title: 'Riesgo de deserción',
+    description: 'Múltiples factores de riesgo detectados: bajo rendimiento + ausentismo + problemas familiares',
+    category: 'academic',
+    severity: 'critical',
+    status: 'reviewing',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    course: 'Carrera: Ingeniería Civil',
+    assignedTo: 'Director de Carrera',
+    metrics: {
+      currentGrade: 5.8,
+      attendanceRate: 68
+    },
+    actions: ['Intervención inmediata', 'Plan integral de apoyo']
+  }
 ];
 
-const badgeBySeverity: Record<Severity, string> = {
-  low: "bg-blue-100 text-blue-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  critical: "bg-red-100 text-red-800",
-};
-
-const badgeByStatus: Record<Status, string> = {
-  pending: "bg-gray-100 text-gray-800",
-  reviewing: "bg-indigo-100 text-indigo-800",
-  resolved: "bg-green-100 text-green-800",
-};
-
-const statusIcon: Record<Status, React.ElementType> = {
-  pending: Clock,
-  reviewing: AlertCircle,
-  resolved: CheckCircle2,
-};
-
-function formatDate(s: string) {
-  const d = new Date(s);
-  return d.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-
 const AlertsModule: React.FC = () => {
-  const { alertRules } = useApp();
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | AlertType>("all");
-  const [severityFilter, setSeverityFilter] = useState<"all" | Severity>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [detail, setDetail] = useState<AlertItem | null>(null);
+  const [alerts] = useState<Alert[]>(mockAlerts);
+  const [filters, setFilters] = useState<AlertFilters>({
+    severity: 'all',
+    status: 'all',
+    category: 'all',
+    dateRange: '7d',
+    assignedTo: 'all'
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = useMemo(() => {
-    const s = search.toLowerCase();
-    return MOCK_ALERTS.filter((a) => {
-      const matchesSearch =
-        a.title.toLowerCase().includes(s) ||
-        a.description.toLowerCase().includes(s) ||
-        a.student.toLowerCase().includes(s) ||
-        a.course.toLowerCase().includes(s) ||
-        a.tags?.some((t) => t.toLowerCase().includes(s));
-      const matchesType = typeFilter === "all" || a.type === typeFilter;
-      const matchesSeverity = severityFilter === "all" || a.severity === severityFilter;
-      const matchesStatus = statusFilter === "all" || a.status === statusFilter;
-      return matchesSearch && matchesType && matchesSeverity && matchesStatus;
+  // Filtrado de alertas
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter(alert => {
+      // Filtro por texto de búsqueda
+      if (searchTerm && !alert.studentName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !alert.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !alert.description.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return false;
+      }
+
+      // Filtros por categorías
+      if (filters.severity !== 'all' && alert.severity !== filters.severity) return false;
+      if (filters.status !== 'all' && alert.status !== filters.status) return false;
+      if (filters.category !== 'all' && alert.category !== filters.category) return false;
+
+      // Filtro por fecha
+      if (filters.dateRange !== 'all') {
+        const now = new Date();
+        const alertDate = new Date(alert.createdAt);
+        const diffHours = (now.getTime() - alertDate.getTime()) / (1000 * 60 * 60);
+        
+        switch (filters.dateRange) {
+          case '24h':
+            if (diffHours > 24) return false;
+            break;
+          case '7d':
+            if (diffHours > 168) return false;
+            break;
+          case '30d':
+            if (diffHours > 720) return false;
+            break;
+        }
+      }
+
+      return true;
     });
-  }, [search, typeFilter, severityFilter, statusFilter]);
+  }, [alerts, filters, searchTerm]);
 
-  const toggleSelect = (id: string) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  // Estadísticas de alertas
+  const alertStats = useMemo(() => {
+    const total = filteredAlerts.length;
+    const critical = filteredAlerts.filter(a => a.severity === 'critical').length;
+    const active = filteredAlerts.filter(a => a.status === 'active').length;
+    const resolved = filteredAlerts.filter(a => a.status === 'resolved').length;
+    
+    return { total, critical, active, resolved };
+  }, [filteredAlerts]);
 
-  const toggleAll = () =>
-    setSelected((prev) => (prev.length === filtered.length ? [] : filtered.map((a) => a.id)));
-
-  const bulkResolve = () => {
-    alert(`(mock) Marcando ${selected.length} alerta(s) como resueltas`);
-    setSelected([]);
+  // Funciones de utilidad
+  const getSeverityColor = (severity: AlertSeverity) => {
+    const colors = {
+      critical: 'bg-red-100 text-red-800 border-red-200',
+      high: 'bg-orange-100 text-orange-800 border-orange-200',
+      medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      low: 'bg-blue-100 text-blue-800 border-blue-200'
+    };
+    return colors[severity];
   };
 
-  const exportCSV = () => {
-    const lines = [
-      ["id", "tipo", "titulo", "estudiante", "curso", "severidad", "estado", "creado"].join(";"),
-      ...filtered.map((a) =>
-        [a.id, a.type, a.title, a.student, a.course, a.severity, a.status, a.createdAt].join(";")
-      ),
-    ].join("\n");
-    const blob = new Blob([lines], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "alertas.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  const getStatusColor = (status: AlertStatus) => {
+    const colors = {
+      active: 'bg-red-100 text-red-800',
+      reviewing: 'bg-yellow-100 text-yellow-800',
+      resolved: 'bg-green-100 text-green-800',
+      dismissed: 'bg-gray-100 text-gray-800'
+    };
+    return colors[status];
+  };
+
+  const getCategoryIcon = (category: AlertCategory) => {
+    const icons = {
+      academic: BookOpen,
+      attendance: Clock,
+      behavioral: User,
+      financial: Target
+    };
+    return icons[category];
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 60) {
+      return `Hace ${diffMins} minutos`;
+    } else if (diffHours < 24) {
+      return `Hace ${diffHours} horas`;
+    } else {
+      return `Hace ${diffDays} días`;
+    }
+  };
+
+  const updateAlertStatus = (alertId: string, newStatus: AlertStatus) => {
+    // Aquí implementarías la llamada al backend
+    console.log(`Actualizando alerta ${alertId} a estado: ${newStatus}`);
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleFilterChange = (key: keyof AlertFilters, value: any) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      severity: 'all',
+      status: 'all',
+      category: 'all',
+      dateRange: '7d',
+      assignedTo: 'all'
+    });
+    setSearchTerm('');
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Alertas</h1>
-          <p className="mt-1 text-sm text-gray-500">Monitorea y gestiona las alertas del sistema</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={exportCSV}
-            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
-          </button>
-          {selected.length > 0 && (
-            <button
-              onClick={bulkResolve}
-              className="inline-flex items-center rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Marcar resueltas ({selected.length})
-            </button>
-          )}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between py-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                <Bell className="w-8 h-8 text-red-500 mr-3" />
+                Sistema de Alertas Académicas
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Gestión y seguimiento de alertas estudiantiles
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <Download className="w-4 h-4 mr-2" />
+                Exportar
+              </button>
+              <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                Filtros
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-{alertRules.autoEscalate && (
-  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-    Regla activa: se escalarán casos con ≥2 escalas en Alto/Crítico.
-  </div>
-)}
-      {/* Filtros y búsqueda */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            {/* Buscador */}
-            <div className="max-w-xl flex-1">
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por título, estudiante, curso o etiqueta…"
-                  className="block w-full rounded-md border border-gray-300 py-2 pl-10 pr-3 leading-5 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg p-6 shadow-sm border">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-blue-100">
+                <AlertTriangle className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Total Alertas</p>
+                <p className="text-2xl font-bold text-gray-900">{alertStats.total}</p>
               </div>
             </div>
+          </div>
 
-            {/* Selectores */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="hidden items-center gap-2 text-sm text-gray-500 md:inline-flex">
-                <Filter className="h-4 w-4" /> Filtros
-              </span>
+          <div className="bg-white rounded-lg p-6 shadow-sm border">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-red-100">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Críticas</p>
+                <p className="text-2xl font-bold text-red-600">{alertStats.critical}</p>
+              </div>
+            </div>
+          </div>
 
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as "all" | AlertType)}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="all">Tipo: Todos</option>
-                <option value="academic">Académica</option>
-                <option value="attendance">Asistencia</option>
-                <option value="behavior">Comportamiento</option>
-              </select>
+          <div className="bg-white rounded-lg p-6 shadow-sm border">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-yellow-100">
+                <Clock className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Activas</p>
+                <p className="text-2xl font-bold text-yellow-600">{alertStats.active}</p>
+              </div>
+            </div>
+          </div>
 
-              <select
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value as "all" | Severity)}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="all">Severidad: Todas</option>
-                <option value="low">Baja</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="critical">Crítica</option>
-              </select>
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "all" | Status)}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="all">Estado: Todos</option>
-                <option value="pending">Pendiente</option>
-                <option value="reviewing">En revisión</option>
-                <option value="resolved">Resuelta</option>
-              </select>
+          <div className="bg-white rounded-lg p-6 shadow-sm border">
+            <div className="flex items-center">
+              <div className="p-3 rounded-lg bg-green-100">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Resueltas</p>
+                <p className="text-2xl font-bold text-green-600">{alertStats.resolved}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Tabla */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left">
+        {/* Barra de búsqueda y filtros */}
+        <div className="bg-white rounded-lg shadow-sm border mb-6">
+          <div className="p-6">
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Búsqueda */}
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    onChange={toggleAll}
-                    checked={selected.length === filtered.length && filtered.length > 0}
+                    type="text"
+                    placeholder="Buscar por estudiante, título o descripción..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Alerta
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Estudiante
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Severidad
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Creado
-                </th>
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {filtered.map((a) => {
-                const Icon = statusIcon[a.status];
-                return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={selected.includes(a.id)}
-                        onChange={() => toggleSelect(a.id)}
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{a.title}</div>
-                      <div className="text-sm text-gray-500">{a.course}</div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {a.tags?.map((t) => (
-                          <span key={t} className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                            <Tag className="mr-1 h-3 w-3" />
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <User className="h-4 w-4 text-gray-400" />
-                        {a.student}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeBySeverity[a.severity]}`}>
-                        {a.severity === "critical" ? "Crítica" : a.severity === "high" ? "Alta" : a.severity === "medium" ? "Media" : "Baja"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeByStatus[a.status]}`}>
-                        <Icon className="h-3 w-3" />
-                        {a.status === "pending" ? "Pendiente" : a.status === "reviewing" ? "En revisión" : "Resuelta"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700">{formatDate(a.createdAt)}</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Ver detalle"
-                          onClick={() => setDetail(a)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button className="text-gray-600 hover:text-gray-900" title="Notificar">
-                          <Mail className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                </div>
+              </div>
 
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-gray-500">
-                    No hay alertas que coincidan con los filtros.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              {/* Filtros rápidos */}
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={filters.severity}
+                  onChange={(e) => handleFilterChange('severity', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">Todas las severidades</option>
+                  <option value="critical">Crítica</option>
+                  <option value="high">Alta</option>
+                  <option value="medium">Media</option>
+                  <option value="low">Baja</option>
+                </select>
+
+                <select
+                  value={filters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="active">Activas</option>
+                  <option value="reviewing">En revisión</option>
+                  <option value="resolved">Resueltas</option>
+                  <option value="dismissed">Descartadas</option>
+                </select>
+
+                <button
+                  onClick={clearFilters}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700
+                      text-white font-semibold px-4 py-2 rounded-lg shadow-lg hover:shadow-xl transform
+                      hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+                      disabled:transform-none flex items-center justify-center text-sm sm:text-base
+                      touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                  >
+                    Limpiar
+                </button>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de alertas */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Alertas Activas ({filteredAlerts.length})
+            </h3>
+          </div>
+          
+          <div className="divide-y divide-gray-200">
+            {filteredAlerts.map((alert) => {
+              const CategoryIcon = getCategoryIcon(alert.category);
+              return (
+                <div key={alert.id} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-4 flex-1">
+                      {/* Avatar e ícono de categoría */}
+                      <div className="flex-shrink-0">
+                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center relative">
+                          <User className="w-6 h-6 text-gray-500" />
+                          <div className="absolute -bottom-1 -right-1">
+                            <CategoryIcon className="w-5 h-5 text-gray-600 bg-white rounded-full p-1" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Información principal */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <h4 className="text-lg font-semibold text-gray-900">{alert.title}</h4>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSeverityColor(alert.severity)}`}>
+                            {alert.severity === 'critical' && '🔴'}
+                            {alert.severity === 'high' && '🟠'}
+                            {alert.severity === 'medium' && '🟡'}
+                            {alert.severity === 'low' && '🔵'}
+                            {alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)}
+                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(alert.status)}`}>
+                            {alert.status}
+                          </span>
+                        </div>
+
+                        <p className="text-gray-600 mb-2">{alert.description}</p>
+
+                        <div className="flex items-center space-x-4 text-sm text-gray-500 mb-3">
+                          <span className="flex items-center">
+                            <User className="w-4 h-4 mr-1" />
+                            {alert.studentName}
+                          </span>
+                          <span className="flex items-center">
+                            <BookOpen className="w-4 h-4 mr-1" />
+                            {alert.course}
+                          </span>
+                          <span className="flex items-center">
+                            <Calendar className="w-4 h-4 mr-1" />
+                            {formatDate(alert.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* Métricas */}
+                        {alert.metrics && (
+                          <div className="flex items-center space-x-4 mb-3">
+                            {alert.metrics.currentGrade && (
+                              <div className="flex items-center text-sm">
+                                <span className="text-gray-500 mr-2">Calificación:</span>
+                                <span className={`font-medium ${alert.metrics.currentGrade < 7 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {alert.metrics.currentGrade}
+                                </span>
+                                {alert.metrics.previousGrade && (
+                                  <span className="ml-1 text-xs text-gray-400">
+                                    (ant: {alert.metrics.previousGrade})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {alert.metrics.attendanceRate && (
+                              <div className="flex items-center text-sm">
+                                <span className="text-gray-500 mr-2">Asistencia:</span>
+                                <span className={`font-medium ${alert.metrics.attendanceRate < 75 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {alert.metrics.attendanceRate}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Acciones recomendadas */}
+                        {alert.actions && alert.actions.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {alert.actions.map((action, index) => (
+                              <span 
+                                key={index}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                              >
+                                {action}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {alert.assignedTo && (
+                          <p className="text-sm text-gray-500">
+                            Asignado a: <span className="font-medium">{alert.assignedTo}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Acciones */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      <button
+                        onClick={() => setSelectedAlert(alert)}
+                        className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Ver detalles"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
+                      
+                      {alert.status === 'active' && (
+                        <button
+                          onClick={() => updateAlertStatus(alert.id, 'reviewing')}
+                          className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors"
+                        >
+                          En revisión
+                        </button>
+                      )}
+                      
+                      {alert.status === 'reviewing' && (
+                        <button
+                          onClick={() => updateAlertStatus(alert.id, 'resolved')}
+                          className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                        >
+                          Resolver
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredAlerts.length === 0 && (
+            <div className="p-12 text-center">
+              <AlertTriangle className="mx-auto h-16 w-16 text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron alertas</h3>
+              <p className="text-gray-500">
+                No hay alertas que coincidan con los filtros seleccionados.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Modal detalle */}
-      {detail && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">Detalle de alerta</h3>
+      {/* Modal de detalles (básico) */}
+      {selectedAlert && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Detalles de la Alerta</h3>
               <button
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                onClick={() => setDetail(null)}
-                aria-label="Cerrar"
+                onClick={() => setSelectedAlert(null)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
-                <X className="h-5 w-5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-
-            <div className="space-y-4 px-5 py-5">
+            
+            <div className="space-y-4">
               <div>
-                <p className="text-base font-medium text-gray-900">{detail.title}</p>
-                <p className="mt-1 text-sm text-gray-600">{detail.description}</p>
+                <h4 className="font-medium text-gray-900">{selectedAlert.title}</h4>
+                <p className="text-gray-600 mt-1">{selectedAlert.description}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Estudiante:</span> {selectedAlert.studentName}
+                </div>
+                <div>
+                  <span className="font-medium">Curso:</span> {selectedAlert.course}
+                </div>
+                <div>
+                  <span className="font-medium">Severidad:</span> {selectedAlert.severity}
+                </div>
+                <div>
+                  <span className="font-medium">Estado:</span> {selectedAlert.status}
+                </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <InfoRow label="Estudiante" value={detail.student} />
-                <InfoRow label="Curso" value={detail.course} />
-                <InfoRow label="Tipo" value={detail.type === "academic" ? "Académica" : detail.type === "attendance" ? "Asistencia" : "Comportamiento"} />
-                <InfoRow label="Severidad" value={detail.severity} />
-                <InfoRow label="Estado" value={detail.status} />
-                <InfoRow label="Asignado a" value={detail.assignedTo || "—"} />
-                <InfoRow label="Creado" value={formatDate(detail.createdAt)} />
-                {detail.updatedAt && <InfoRow label="Actualizado" value={formatDate(detail.updatedAt)} />}
-              </div>
-
-              {detail.tags && detail.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {detail.tags.map((t) => (
-                    <span key={t} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
-                      <Tag className="mr-1 h-3 w-3" />
-                      {t}
-                    </span>
-                  ))}
+              {selectedAlert.actions && (
+                <div>
+                  <h5 className="font-medium text-gray-900 mb-2">Acciones recomendadas:</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    {selectedAlert.actions.map((action, index) => (
+                      <li key={index}>{action}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                <button
-                  className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                  onClick={() => {
-                    alert("(mock) Marcada como en revisión");
-                    setDetail({ ...detail, status: "reviewing" });
-                  }}
-                >
-                  Pasar a revisión
-                </button>
-                <button
-                  className="rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-                  onClick={() => {
-                    alert("(mock) Marcada como resuelta");
-                    setDetail({ ...detail, status: "resolved" });
-                  }}
-                >
-                  Resolver
-                </button>
-                <button
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  onClick={() => alert("(mock) Asignada a Bienestar")}
-                >
-                  Asignar
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -445,12 +627,5 @@ const AlertsModule: React.FC = () => {
     </div>
   );
 };
-
-const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div>
-    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
-    <p className="mt-0.5 text-sm text-gray-900">{value}</p>
-  </div>
-);
 
 export default AlertsModule;

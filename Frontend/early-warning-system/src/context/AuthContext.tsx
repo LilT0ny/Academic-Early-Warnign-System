@@ -1,108 +1,53 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
-type Role = "admin" | "teacher" | "specialist";
-
-type Permission =
-  | "user.read" | "user.create" | "user.delete"
-  | "alerts.read" | "alerts.resolve"
-  | "students.read"
-  | "appointments.read" | "appointments.create" | "appointments.cancel"
-  | "reports.read" | "reports.generate" | "reports.schedule"
-  | "settings.read" | "settings.update"
-  | "profile.read" | "profile.update";
-
-export interface AppUser {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-}
-
-const ROLE_PERMS: Record<Role, Permission[]> = {
-  admin: [
-    "user.read","user.create","user.delete",
-    "alerts.read","alerts.resolve",
-    "students.read",
-    "appointments.read","appointments.create","appointments.cancel",
-    "reports.read","reports.generate","reports.schedule",
-    "settings.read","settings.update",
-    "profile.read","profile.update",
-  ],
-  teacher: [
-    "alerts.read",
-    "students.read",
-    "appointments.read","appointments.create","appointments.cancel",
-    "reports.read","reports.generate",
-    "profile.read","profile.update",
-  ],
-  specialist: [
-    "alerts.read","alerts.resolve",
-    "students.read",
-    "appointments.read","appointments.create","appointments.cancel",
-    "reports.read",
-    "profile.read","profile.update",
-  ],
+type User = { email: string; name: string };
+type AuthContextType = {
+  isAuthenticated: boolean;
+  user: User | null;
+  login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  logout: () => void;
 };
 
-interface AuthContextValue {
-  user: AppUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  hasPermission: (perm: Permission) => boolean;
-  isRole: (...roles: Role[]) => boolean;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const AuthContext = createContext<AuthContextType>({} as any);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
+  // Cargar sesión al montar
   useEffect(() => {
-    // mock persistencia
-    const raw = localStorage.getItem("mock_user");
+    const raw = localStorage.getItem("authUser") || sessionStorage.getItem("authUser");
     if (raw) setUser(JSON.parse(raw));
   }, []);
 
-  const login = async (email: string, _password: string) => {
-    // MOCK: elige rol según email
-    const role: Role =
-      email.includes("admin") ? "admin" :
-      email.includes("esp") || email.includes("spec") ? "specialist" :
-      "teacher";
-    const mock: AppUser = {
-      id: crypto.randomUUID(),
-      name: email.split("@")[0],
-      email,
-      role,
-    };
-    setUser(mock);
-    localStorage.setItem("mock_user", JSON.stringify(mock));
-  };
+  async function login(email: string, password: string, remember = true) {
+    // Aquí iría tu llamada real a API. Por ahora aceptamos cualquier par no vacío:
+    if (!email || !password) throw new Error("Correo y contraseña requeridos");
 
-  const logout = async () => {
+    const mockUser: User = { email, name: "Coordinación Académica" };
+    // Persistencia: localStorage si “Recordarme”, si no sessionStorage
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem("authUser", JSON.stringify(mockUser));
+    // Borra del otro storage por si venía de una sesión previa
+    (remember ? sessionStorage : localStorage).removeItem("authUser");
+
+    setUser(mockUser);
+  }
+
+  function logout() {
+    localStorage.removeItem("authUser");
+    sessionStorage.removeItem("authUser");
     setUser(null);
-    localStorage.removeItem("mock_user");
-    window.location.href = "/login";
-  };
-
-  const hasPermission = (perm: Permission) => {
-    if (!user) return false;
-    return ROLE_PERMS[user.role].includes(perm);
-  };
-
-  const isRole = (...roles: Role[]) => !!user && roles.includes(user.role);
+  }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, hasPermission, isRole }}>
+    <AuthContext.Provider value={{ isAuthenticated: !!user, user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-};
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+  return useContext(AuthContext);
+}

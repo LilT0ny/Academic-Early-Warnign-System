@@ -73,15 +73,20 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
     setErrors({});
     try {
-      await login(formData.email, formData.password);
-      navigate("/", { replace: true });
+      // lee el checkbox "remember-me"
+      const remember = (document.getElementById("remember-me") as HTMLInputElement)?.checked ?? true;
+      await login(formData.email, formData.password, remember);
+      navigate("/dashboard", { replace: true }); // <<— envía al dashboard
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
+    } catch (_err) {
       setErrors({ general: "Credenciales inválidas" });
     } finally {
       setIsLoading(false);
     }
   };
+
+
+  
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8" aria-label="Página de inicio de sesión">

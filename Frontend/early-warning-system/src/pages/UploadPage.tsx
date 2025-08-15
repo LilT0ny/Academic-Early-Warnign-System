@@ -1,12 +1,5 @@
-import React from "react";
-import MainLayout from "../layouts/MainLayout";
-import UploadExcelModule from "../modules/surveys/UploadExcelModule";
+import FileUploadModule from "../modules/upload/FileUploadModule";
 
-const UploadPage: React.FC = () => {
-  return (
-    <MainLayout currentPage="upload">
-      <UploadExcelModule />
-    </MainLayout>
-  );
-};
-export default UploadPage;
+export default function UploadPage() {
+  return <FileUploadModule />;
+}
